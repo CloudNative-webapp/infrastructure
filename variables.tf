@@ -1,7 +1,31 @@
 variable vpc_cidr_block{
     type = string
     description = "CIDR for VPC"
-    // default = "10.0.0.0/16"
+}
+
+variable instance_tenancy{
+    type = string
+    description = "instance_tenancy for VPC"
+}
+
+variable enable_dns_support{
+    type = string
+    description = "dns_support for VPC"
+}
+
+variable enable_dns_hostnames{
+    type = string
+    description = "dns_hostnames for VPC"
+}
+
+variable enable_classiclink_dns_support{
+    type = string
+    description = "classiclink_dns_support for VPC"
+}
+
+variable assign_generated_ipv6_cidr_block{
+    type = string
+    description = "ipv6_cidr_block for VPC"
 }
 
 variable subnet_az_cidr{
@@ -17,15 +41,7 @@ variable subnet_az_vpc1{
 variable subnet_vpcone_names{
     type = list
     description = "subnet names for VPC1"
-    // default = "10.0.0.0/16"
 }
-
-
-// variable subnet_cidr_block{
-//     type = string
-//     description = "CIDR for subnet"
-//     // default = "10.0.1.0/24"
-// }
 
 variable aws_profile{
     type = string
