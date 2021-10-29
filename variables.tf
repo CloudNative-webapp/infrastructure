@@ -33,6 +33,16 @@ variable subnet_az_cidr{
     description = "subnet cidr for VPC1"
 }
 
+variable subnet_az_cidr_private{
+    type = list(string)
+    description = "private subnet cidr for VPC1"
+}
+
+variable subnet_az_vpc1_private{
+    type = list(string)
+    description = "private subnet az for VPC1"
+}
+
 variable subnet_az_vpc1{
     type = list(string)
     description = "subnet az for VPC1"
@@ -57,3 +67,43 @@ variable aws_region{
     type = string
     description="AWS region"
 }
+
+variable aws_db_name{
+    type = string
+    description="name for rds"
+}
+
+variable aws_db_username{
+    type = string
+    description="username for rds"
+}
+
+variable aws_db_password{
+    type = string
+    description="password for rds"
+}
+
+variable aws_db_instance_class{
+    type = string
+    description="instance class for rds"
+}
+
+variable engine_version{
+    type = string
+    description="engine version for rds"
+}
+
+variable engine{
+    type = string
+    description="engine for rds"
+}
+
+variable db_port{
+    type = number
+    description="database port id"
+}
+
+// variable aws_public_key{
+//     type = string
+//     description="ssh public key"
+// }
