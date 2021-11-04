@@ -316,7 +316,7 @@ data "aws_ami" "testAmi" {
 
 resource "aws_iam_policy" "WebAppS3" {
   name        = "WebAppS3"
-  description = "A test policy"
+  description = "IAM Policy"
   policy      = <<EOF
 {
   "Version": "2012-10-17",
@@ -327,7 +327,7 @@ resource "aws_iam_policy" "WebAppS3" {
               "s3:GetBucketLocation",
               "s3:GetObject",
               "s3:PutObject",
-              "s3.DeleteObject"
+              "s3:DeleteObject"
             ],
       "Effect": "Allow",
       "Resource": ["arn:aws:s3:::${aws_s3_bucket.imagebucket-dev-snehalchavan-me.id}",
