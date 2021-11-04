@@ -103,7 +103,7 @@ variable db_port{
     description="database port id"
 }
 
-// variable aws_public_key{
-//     type = string
-//     description="ssh public key"
-// }
+variable aws_public_key{
+    type = string
+    description="ssh public key"
+}

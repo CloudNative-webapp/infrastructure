@@ -59,7 +59,7 @@ resource "aws_eip" "nat_eip" {
 
 resource "aws_nat_gateway" "nat" {
   allocation_id = "${aws_eip.nat_eip.id}"
-  subnet_id     = "${element(aws_subnet.subnet_vpcone.*.id, 0)}"
+  subnet_id     = aws_subnet.private_subnet_vpcone[0].id
   depends_on    = [aws_internet_gateway.gw_vpcone]
   tags = {
     Name        = "nat"
@@ -76,10 +76,15 @@ resource "aws_route" "public_route" {
 resource "aws_route_table" "public_route_table_vpcone" {
   vpc_id = aws_vpc.vpcone.id
 
-
   tags = {
     Name = "public_route_table_vpcone"
   }
+}
+
+resource "aws_route_table_association" "private_subnet_rout_table_association" {
+    count = length(var.subnet_az_cidr_private)
+  subnet_id      = aws_subnet.private_subnet_vpcone[count.index].id
+  route_table_id = aws_route_table.public_route_table_vpcone.id
 }
 
 resource "aws_route_table_association" "subnet_rout_table_association" {
@@ -96,6 +101,7 @@ resource "aws_security_group" "application" {
   tags = {
     Name = "application security group"
   }
+
 }
 
 resource "aws_security_group_rule" "port_one" {
@@ -106,6 +112,15 @@ resource "aws_security_group_rule" "port_one" {
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.application.id
 }
+
+// resource "aws_security_group_rule" "port_one_egress" {
+//   type              = "egress"
+//   from_port         = 80
+//   to_port           = 80
+//   protocol          = "tcp"
+//   cidr_blocks       = ["0.0.0.0/0"]
+//   security_group_id = aws_security_group.application.id
+// }
 
 resource "aws_security_group_rule" "port_two" {
   type              = "ingress"
@@ -121,6 +136,15 @@ resource "aws_security_group_rule" "port_three" {
   from_port         = 443
   to_port           = 443
   protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.application.id
+}
+
+resource "aws_security_group_rule" "port_three_egress" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.application.id
 }
@@ -143,6 +167,16 @@ resource "aws_security_group" "database" {
   tags = {
     Name = "database security group"
   }
+}
+
+resource "aws_security_group_rule" "port_db_outbound" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = [aws_vpc.vpcone.cidr_block]
+  security_group_id = aws_security_group.database.id
+  // source_security_group_id = aws_security_group.application.id
 }
 
 resource "aws_security_group_rule" "port_db" {
@@ -212,7 +246,7 @@ resource "aws_kms_key" "mykey" {
 
 resource "aws_key_pair" "deployer" {
   key_name   = "mykpair"
-  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCRmD04cW9YWYMWiQDSBKIszPE9ZAtH/Z3ShorkdkHk3tbDnTmewK6EkYRmzmItRtUFXqum1ORVZnGM7GeujuxhKhN7v0nLrAn0Xnlkbsj3fTEpFEZWuyvenEcxXeyr8HKBw+oHmDbuVTn69rKB5umDVnTayq5XkRRENxjI28bb7+zEjidtPnVibgeIfT8fXRMLNaWs/yIzL39GviqSjii1TdDYQv7gSn6XrsPKZPWg0vD3SQTb7oijXjkK9LyaVBQ9W7VKyYp+p06CciqSodmQNLpcYFZs8Tlk4PKAuxmRcLUpEnT5OrP6XQmv/ZuZkJ+GHGrfSwsV2bZNCrO3YnRd"
+  public_key = var.aws_public_key
 }
 
 resource "aws_s3_bucket" "imagebucket-dev-snehalchavan-me" {
@@ -239,10 +273,7 @@ resource "aws_s3_bucket" "imagebucket-dev-snehalchavan-me" {
   }
   server_side_encryption_configuration {
     rule {
-      apply_server_side_encryption_by_default {
-        kms_master_key_id = aws_kms_key.mykey.arn
-        sse_algorithm     = "aws:kms"
-      }
+      apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
     }
   }
 }
@@ -257,12 +288,23 @@ resource "aws_instance" "ec2_instance" {
   vpc_security_group_ids = ["${aws_security_group.application.id}"]
   availability_zone = var.subnet_az_vpc1[0]
   subnet_id = aws_subnet.subnet_vpcone[0].id
-  user_data = "${file("user-data-db.sh")}"
+  user_data = <<-EOF
+  #! /bin/bash
+  echo export DB_USERNAME="${var.aws_db_username}" >> /etc/environment
+  echo export DB_NAME="${var.aws_db_name}" >> /etc/environment
+  echo export DB_PASSWORD="${var.aws_db_password}" >> /etc/environment
+  echo export DB_HOST="${aws_db_instance.postgres_rds_instance.address}" >> /etc/environment
+  echo export S3_BUCKET="${aws_s3_bucket.imagebucket-dev-snehalchavan-me.id}" >> /etc/environment
+  echo export PORT="${var.db_port}" >> /etc/environment
+  EOF
   key_name= aws_key_pair.deployer.id
   root_block_device {
     delete_on_termination = true
     volume_size = 20
     volume_type = "gp2"
+  }
+  tags = {
+    Name = "webapp"
   }
 }
 
@@ -271,13 +313,34 @@ data "aws_ami" "testAmi" {
   owners = ["self"]
 }
 
-resource "aws_iam_role_policy" "WebAppS3" {
+
+resource "aws_iam_policy" "WebAppS3" {
   name        = "WebAppS3"
-  role = "${aws_iam_role.iam_role.id}"
-  # Terraform's "jsonencode" function converts a
-  # Terraform expression result to valid JSON syntax.
-  policy = "${file("WebAppS3.json")}"
-  
+  description = "A test policy"
+  policy      = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+                "s3:ListAllMyBuckets", 
+              "s3:GetBucketLocation",
+              "s3:GetObject",
+              "s3:PutObject",
+              "s3.DeleteObject"
+            ],
+      "Effect": "Allow",
+      "Resource": ["arn:aws:s3:::${aws_s3_bucket.imagebucket-dev-snehalchavan-me.id}",
+                "arn:aws:s3:::${aws_s3_bucket.imagebucket-dev-snehalchavan-me.id}/*"]
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy_attachment" "test-attach" {
+  role       = aws_iam_role.iam_role.name
+  policy_arn = aws_iam_policy.WebAppS3.arn
 }
 
 resource "aws_iam_instance_profile" "iam_ec2_roleprofile" {
