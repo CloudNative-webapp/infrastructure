@@ -8,8 +8,8 @@
             "s3:DeleteObject"
          ],
         "Effect"   : "Allow",
-        "Resource" : ["arn:aws:s3:::${aws_s3_bucket.imagebucket-dev-snehalchavan-me.id}",
-                      "arn:aws:s3:::${aws_s3_bucket.imagebucket-dev-snehalchavan-me.id}/*"]
+        "Resource" : ["arn:aws:s3:::${aws_s3_bucket.imagebucket-prod-snehalchavan-me.id}",
+                      "arn:aws:s3:::${aws_s3_bucket.imagebucket-prod-snehalchavan-me.id}/*"]
       }
     ]
   }

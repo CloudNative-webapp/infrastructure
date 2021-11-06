@@ -107,3 +107,23 @@ variable aws_public_key{
     type = string
     description="ssh public key"
 }
+
+variable iam_role{
+    type = string
+    description="role for ec2"
+}
+
+variable "domainName" {
+  description = "Domain name"
+  type        = string
+}
+
+variable "ownerAcc" {
+  description = "Owner acc"
+  type        = string
+}
+
+variable "ownerAcc1" {
+  description = "Owner acc1"
+  type        = string
+}

@@ -151,8 +151,8 @@ resource "aws_security_group_rule" "port_three_egress" {
 
 resource "aws_security_group_rule" "port_four" {
   type              = "ingress"
-  from_port         = 5000
-  to_port           = 5000
+  from_port         = 3000
+  to_port           = 3000
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.application.id
@@ -245,12 +245,12 @@ resource "aws_kms_key" "mykey" {
 }
 
 resource "aws_key_pair" "deployer" {
-  key_name   = "mykpair"
+  key_name   = "mypair"
   public_key = var.aws_public_key
 }
 
-resource "aws_s3_bucket" "imagebucket-dev-snehalchavan-me" {
-  bucket = "imagebucket-dev-snehalchavan-me"
+resource "aws_s3_bucket" "imagebucket-prod-snehalchavan-me" {
+  bucket = "imagebucket-prod-snehalchavan-me"
   acl    = "private"
   force_destroy = true
 
@@ -294,7 +294,7 @@ resource "aws_instance" "ec2_instance" {
   echo export DB_NAME="${var.aws_db_name}" >> /etc/environment
   echo export DB_PASSWORD="${var.aws_db_password}" >> /etc/environment
   echo export DB_HOST="${aws_db_instance.postgres_rds_instance.address}" >> /etc/environment
-  echo export S3_BUCKET="${aws_s3_bucket.imagebucket-dev-snehalchavan-me.id}" >> /etc/environment
+  echo export S3_BUCKET="${aws_s3_bucket.imagebucket-prod-snehalchavan-me.id}" >> /etc/environment
   echo export PORT="${var.db_port}" >> /etc/environment
   EOF
   key_name= aws_key_pair.deployer.id
@@ -310,7 +310,8 @@ resource "aws_instance" "ec2_instance" {
 
 data "aws_ami" "testAmi" {
   most_recent = true
-  owners = ["self"]
+  // owners = ["self"]
+  owners = [var.ownerAcc,var.ownerAcc1]
 }
 
 
@@ -330,8 +331,8 @@ resource "aws_iam_policy" "WebAppS3" {
               "s3:DeleteObject"
             ],
       "Effect": "Allow",
-      "Resource": ["arn:aws:s3:::${aws_s3_bucket.imagebucket-dev-snehalchavan-me.id}",
-                "arn:aws:s3:::${aws_s3_bucket.imagebucket-dev-snehalchavan-me.id}/*"]
+      "Resource": ["arn:aws:s3:::${aws_s3_bucket.imagebucket-prod-snehalchavan-me.id}",
+                "arn:aws:s3:::${aws_s3_bucket.imagebucket-prod-snehalchavan-me.id}/*"]
     }
   ]
 }
@@ -339,30 +340,53 @@ EOF
 }
 
 resource "aws_iam_role_policy_attachment" "test-attach" {
-  role       = aws_iam_role.iam_role.name
+  role       = "${data.aws_iam_role.iam_role.name}"
   policy_arn = aws_iam_policy.WebAppS3.arn
+}
+
+data "aws_iam_role" "iam_role" {
+
+name = var.iam_role
+
 }
 
 resource "aws_iam_instance_profile" "iam_ec2_roleprofile" {
   name = "iam_ec2_roleprofile"
-  role = "${aws_iam_role.iam_role.name}"
+  role = "${data.aws_iam_role.iam_role.name}"
 }
 
-
-resource "aws_iam_role" "iam_role" {
-  name                = "EC2-CSYE6225"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Sid    = ""
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-      },
-    ]
-  })
+data "aws_route53_zone" "selected" {
+  name         = var.domainName
+  private_zone = false
 }
+
+// output "instance_ip_addr" {
+//   value = aws_instance.ec2_instance.public_ip
+// }
+
+resource "aws_route53_record" "www" {
+  zone_id = data.aws_route53_zone.selected.zone_id
+  name    = "api.${data.aws_route53_zone.selected.name}"
+  type    = "A"
+  ttl     = "60"
+  depends_on = [aws_instance.ec2_instance]
+  records = ["${aws_instance.ec2_instance.public_ip}"]
+}
+
+// resource "aws_iam_role" "iam_role" {
+//   name                = "EC2-CSYE6225"
+//   assume_role_policy = jsonencode({
+//     Version = "2012-10-17"
+//     Statement = [
+//       {
+//         Action = "sts:AssumeRole"
+//         Effect = "Allow"
+//         Sid    = ""
+//         Principal = {
+//           Service = "ec2.amazonaws.com"
+//         }
+//       },
+//     ]
+//   })
+// }
 
