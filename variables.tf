@@ -127,3 +127,13 @@ variable "ownerAcc1" {
   description = "Owner acc1"
   type        = string
 }
+
+variable "codeDeployGroupName" {
+  description = "Code deploy group name"
+  type        = string
+}
+
+variable "codeDeployAppName" {
+  description = "Code deploy app name"
+  type        = string
+}
