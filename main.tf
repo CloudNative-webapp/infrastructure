@@ -415,11 +415,6 @@ resource "aws_autoscaling_group" "webapp_asg" {
   default_cooldown = 60
   vpc_zone_identifier = [aws_subnet.subnet_vpcone[0].id,aws_subnet.subnet_vpcone[1].id,aws_subnet.subnet_vpcone[2].id]
   target_group_arns    = [ aws_lb_target_group.alb-target-group.arn ]
-}
-
-resource "aws_autoscaling_group_tag" "tagForAsg" {
-  autoscaling_group_name = aws_autoscaling_group.webapp_asg.id
-
   tag {
     key   = "Name"
     value = "webapp"
@@ -427,6 +422,17 @@ resource "aws_autoscaling_group_tag" "tagForAsg" {
     propagate_at_launch = true
   }
 }
+
+// resource "aws_autoscaling_group_tag" "tagForAsg" {
+//   autoscaling_group_name = aws_autoscaling_group.webapp_asg.id
+
+//   tag {
+//     key   = "Name"
+//     value = "webapp"
+
+//     propagate_at_launch = true
+//   }
+// }
 
 resource "aws_autoscaling_policy" "scaleUpPolicy" {
   name                   = "scaleUpPolicy"
