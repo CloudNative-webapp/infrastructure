@@ -137,3 +137,50 @@ variable "codeDeployAppName" {
   description = "Code deploy app name"
   type        = string
 }
+
+variable "fromAddress" {
+  description = "Address to send email to"
+  type        = string
+}
+
+variable "dynamoDBName"{
+    description = "DynamoDB name"
+    type        = string
+}
+
+variable "backup_retention_period" {
+  type = string
+}
+
+variable "availability_zone" {
+  type = string
+}
+
+variable "lambdaBucket"{
+    type = string
+}
+
+variable "S3_BucketName" {
+  description = "S3 Bucket Name"
+  type        = string
+}
+
+variable "s3bucketNameImage" {
+  description = "S3 Bucket Name image"
+  type        = string
+}
+
+variable "AWS_ACCOUNT_ID" {
+  description = "Aws account ID"
+  type        = string
+}
+
+variable "username_iam" {
+  description = "Aws user name"
+  type        = string
+}
+
+variable "CODE_DEPLOY_APPLICATION_NAME" {
+  description = "code deploy application name"
+  type        = string
+}
