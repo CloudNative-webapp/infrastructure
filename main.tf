@@ -234,6 +234,8 @@ resource "aws_db_instance" "postgres_rds_instance" {
   vpc_security_group_ids = ["${aws_security_group.database.id}"]
   backup_retention_period   = var.backup_retention_period
   availability_zone = var.subnet_az_vpc1_private[0]
+  kms_key_id = aws_kms_key.keyForRdsEncryption.arn
+  storage_encrypted = true
 }
 
 data "aws_db_instance" "masterDB" {
@@ -285,6 +287,11 @@ resource "aws_db_parameter_group" "csye6225_db_parametergroup" {
   parameter {
     name = "application_name"
     value = "postgres logs reports"
+  }
+
+  parameter {
+    name = "rds.force_ssl"
+    value = 1
   }
 
 }
@@ -414,6 +421,7 @@ resource "aws_launch_configuration" "asg_launch_config" {
   image_id      = data.aws_ami.testAmi.id
   instance_type = "t2.micro"
   key_name = aws_key_pair.deployer.id
+  // key_name                    = data.aws_kms_key.by_id.id
   associate_public_ip_address = true
   depends_on = [aws_db_instance.postgres_rds_instance]
   user_data = <<-EOF
@@ -434,6 +442,7 @@ resource "aws_launch_configuration" "asg_launch_config" {
     delete_on_termination = true
     volume_size = 20
     volume_type = "gp2"
+    encrypted = true
   }
 }
 
@@ -595,10 +604,23 @@ resource "aws_lb_target_group" "alb-target-group" {
   }
 }
 
+// resource "aws_lb_listener" "alb-listener" {
+//   load_balancer_arn = aws_lb.Application-Load-Balancer.arn
+//   port              = "80"
+//   protocol          = "HTTP"
+
+//   default_action {
+//     type             = "forward"
+//     target_group_arn = aws_lb_target_group.alb-target-group.arn
+//   }
+// }
+
 resource "aws_lb_listener" "alb-listener" {
   load_balancer_arn = aws_lb.Application-Load-Balancer.arn
-  port              = "80"
-  protocol          = "HTTP"
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = data.aws_acm_certificate.certificateForProd.arn
 
   default_action {
     type             = "forward"
@@ -1186,3 +1208,27 @@ resource "aws_iam_user_policy_attachment" "Update-lambda-function_policy_attach"
   policy_arn = "${aws_iam_policy.Update-lambda-function.arn}"
 }
 
+
+resource "aws_kms_key" "keyForEC2Encryption" {
+  description             = "EC2 key for encryption"
+  deletion_window_in_days = 10
+}
+
+resource "aws_kms_key" "keyForRdsEncryption" {
+  description             = "RDS key for encryption"
+  deletion_window_in_days = 10
+}
+
+data "aws_acm_certificate" "certificateForProd" {
+  domain   = var.domainName
+  statuses = ["ISSUED"]
+}
+
+data "aws_kms_key" "by_id" {
+  key_id = aws_kms_key.keyForEC2Encryption.id
+}
+
+// resource "aws_lb_listener_certificate" "certificateForListener" {
+//   listener_arn    = aws_lb_listener.alb-listener.arn
+//   certificate_arn = data.aws_acm_certificate.certificateForProd.arn
+// }
