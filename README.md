@@ -57,6 +57,7 @@ Creation of multiple VPC's along with its resources
 
 ## Command to import certificate
 
-aws acm import-certificate --certificate fileb:///Users/snehalchavan/Downloads/prod_snehalchavan_me/prod_snehalchavan_me.crt \
+
+``aws acm import-certificate --certificate fileb:///Users/snehalchavan/Downloads/prod_snehalchavan_me/prod_snehalchavan_me.crt \
      --certificate-chain fileb:///Users/snehalchavan/Downloads/prod_snehalchavan_me/prod_snehalchavan_me.ca-bundle \
-     --private-key fileb:///Users/snehalchavan/Desktop/privateProd.key
+     --private-key fileb:///Users/snehalchavan/Desktop/privateProd.key``
