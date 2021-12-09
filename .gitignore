@@ -8,6 +8,7 @@
 # .*.tfvars files
 *.tfvars
 
+
 # Crash log files
 crash.log
 
