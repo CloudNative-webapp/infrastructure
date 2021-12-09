@@ -184,3 +184,8 @@ variable "CODE_DEPLOY_APPLICATION_NAME" {
   description = "code deploy application name"
   type        = string
 }
+
+variable "keyname"{
+  description = "Key name"
+  type        = string
+}
