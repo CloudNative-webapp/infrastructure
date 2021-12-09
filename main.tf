@@ -115,7 +115,7 @@ resource "aws_security_group" "application" {
       to_port          = 22
       protocol         = "tcp"
       description      = "SSH from VPC"
-      cidr_blocks      = [aws_vpc.vpcone.cidr_block]
+      cidr_blocks      = ["0.0.0.0/0"]
       ipv6_cidr_blocks = []
       prefix_list_ids  = []
       security_groups  = [aws_security_group.loadbalancer-security-group.id]
@@ -234,6 +234,8 @@ resource "aws_db_instance" "postgres_rds_instance" {
   vpc_security_group_ids = ["${aws_security_group.database.id}"]
   backup_retention_period   = var.backup_retention_period
   availability_zone = var.subnet_az_vpc1_private[0]
+  kms_key_id = aws_kms_key.keyForRdsEncryption.arn
+  storage_encrypted = true
 }
 
 data "aws_db_instance" "masterDB" {
@@ -285,6 +287,11 @@ resource "aws_db_parameter_group" "csye6225_db_parametergroup" {
   parameter {
     name = "application_name"
     value = "postgres logs reports"
+  }
+
+  parameter {
+    name = "rds.force_ssl"
+    value = 1
   }
 
 }
@@ -374,11 +381,6 @@ resource "aws_iam_role_policy_attachment" "test-attach" {
   policy_arn = aws_iam_policy.WebAppS3.arn
 }
 
-// data "aws_iam_role" "iam_role" {
-
-// name = var.iam_role
-
-// }
 
 resource "aws_iam_instance_profile" "iam_ec2_roleprofile" {
   name = "iam_ec2_roleprofile"
@@ -408,32 +410,40 @@ resource "aws_route53_record" "www" {
   }
 }
 
-
-resource "aws_launch_configuration" "asg_launch_config" {
-  name          = "asg_launch_config"
-  image_id      = data.aws_ami.testAmi.id
-  instance_type = "t2.micro"
-  key_name = aws_key_pair.deployer.id
-  associate_public_ip_address = true
+resource "aws_launch_template" "asg_launch_template" {
   depends_on = [aws_db_instance.postgres_rds_instance]
-  user_data = <<-EOF
-  #! /bin/bash
-  echo export DB_USERNAME="${var.aws_db_username}" >> /etc/environment
-  echo export DB_NAME="${var.aws_db_name}" >> /etc/environment
-  echo export DB_PASSWORD="${var.aws_db_password}" >> /etc/environment
-  echo export DB_HOST="${aws_db_instance.postgres_rds_instance.address}" >> /etc/environment
-  echo export S3_BUCKET="${aws_s3_bucket.imagebucket-prod-snehalchavan-me.id}" >> /etc/environment
-  echo export PORT="${var.db_port}" >> /etc/environment
-  echo export TOPIC_ARN="${aws_sns_topic.user_sns_topic.arn}" >>/etc/environment
-  echo export domain_name="${var.domainName}" >> /etc/environment
-  echo export DB_HOST_REPLICA="${aws_db_instance.rds_replica.address}" >> /etc/environment
-  EOF
-  iam_instance_profile = "${aws_iam_instance_profile.iam_ec2_roleprofile.id}"
-  security_groups = ["${aws_security_group.application.id}"]
-  root_block_device {
-    delete_on_termination = true
-    volume_size = 20
-    volume_type = "gp2"
+  name = "asg_launch_template"
+  key_name = var.keyname
+   iam_instance_profile {
+    name = aws_iam_instance_profile.iam_ec2_roleprofile.name
+  }
+  image_id                    = data.aws_ami.testAmi.id
+  instance_type               = "t2.micro"
+  vpc_security_group_ids      = [aws_security_group.application.id]
+  user_data = base64encode(
+    <<-EOF
+		#! /bin/bash
+      echo export DB_USERNAME="${var.aws_db_username}" >> /etc/environment
+      echo export DB_NAME="${var.aws_db_name}" >> /etc/environment
+      echo export DB_PASSWORD="${var.aws_db_password}" >> /etc/environment
+      echo export DB_HOST="${aws_db_instance.postgres_rds_instance.address}" >> /etc/environment
+      echo export S3_BUCKET="${aws_s3_bucket.imagebucket-prod-snehalchavan-me.id}" >> /etc/environment
+      echo export PORT="${var.db_port}" >> /etc/environment
+      echo export TOPIC_ARN="${aws_sns_topic.user_sns_topic.arn}" >> /etc/environment
+      echo export domain_name="${var.domainName}" >> /etc/environment
+      echo export DB_HOST_REPLICA="${aws_db_instance.rds_replica.address}" >> /etc/environment
+      EOF
+  )
+  block_device_mappings {
+    device_name = "/dev/sda1"
+
+    ebs {
+      volume_size           = 20
+      volume_type           = "gp2"
+      delete_on_termination = true
+      encrypted = true
+      kms_key_id = aws_kms_key.keyForEC2Encryption.arn
+    }
   }
 }
 
@@ -441,7 +451,10 @@ resource "aws_autoscaling_group" "webapp_asg" {
   desired_capacity   = 3
   max_size           = 5
   min_size           = 3
-  launch_configuration = aws_launch_configuration.asg_launch_config.name
+  launch_template {
+    id      = aws_launch_template.asg_launch_template.id
+    version = aws_launch_template.asg_launch_template.latest_version
+  }
   default_cooldown = 60
   vpc_zone_identifier = [aws_subnet.subnet_vpcone[0].id,aws_subnet.subnet_vpcone[1].id,aws_subnet.subnet_vpcone[2].id]
   target_group_arns    = [ aws_lb_target_group.alb-target-group.arn ]
@@ -597,8 +610,10 @@ resource "aws_lb_target_group" "alb-target-group" {
 
 resource "aws_lb_listener" "alb-listener" {
   load_balancer_arn = aws_lb.Application-Load-Balancer.arn
-  port              = "80"
-  protocol          = "HTTP"
+  port              = "443"
+  protocol          = "HTTPS"
+  // ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = data.aws_acm_certificate.certificateForProd.arn
 
   default_action {
     type             = "forward"
@@ -606,9 +621,6 @@ resource "aws_lb_listener" "alb-listener" {
   }
 }
 
-// data "aws_iam_role" "codeDeployServiceRole" {
-//   name = "CodeDeployServiceRole"
-// }
 
 resource "aws_codedeploy_app" "codeDeployApp" {
   name = var.codeDeployAppName
@@ -1186,3 +1198,94 @@ resource "aws_iam_user_policy_attachment" "Update-lambda-function_policy_attach"
   policy_arn = "${aws_iam_policy.Update-lambda-function.arn}"
 }
 
+
+resource "aws_kms_key" "keyForEC2Encryption" {
+  description             = "EC2 key for encryption"
+  deletion_window_in_days = 10
+  policy                  = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "",
+      "Effect": "Allow",
+      "Principal": {"AWS": "arn:aws:iam::${var.AWS_ACCOUNT_ID}:root"},
+      "Action": "kms:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "",
+      "Effect": "Allow",
+      "Principal": {"AWS": [
+        "arn:aws:iam::${var.AWS_ACCOUNT_ID}:user/${var.username_iam}",
+        "arn:aws:iam::${var.AWS_ACCOUNT_ID}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+      ]},
+      "Action": [
+        "kms:Create*",
+        "kms:Describe*",
+        "kms:Enable*",
+        "kms:List*",
+        "kms:Put*",
+        "kms:Update*",
+        "kms:Revoke*",
+        "kms:Disable*",
+        "kms:Get*",
+        "kms:Delete*",
+        "kms:TagResource",
+        "kms:UntagResource",
+        "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "",
+      "Effect": "Allow",
+      "Principal": {"AWS": [
+        "arn:aws:iam::${var.AWS_ACCOUNT_ID}:user/${var.username_iam}",
+        "arn:aws:iam::${var.AWS_ACCOUNT_ID}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",
+        "arn:aws:iam::${var.AWS_ACCOUNT_ID}:root"
+      ]},
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:ReEncrypt*",
+        "kms:GenerateDataKey*",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "",
+      "Effect": "Allow",
+      "Principal": {"AWS": [
+        "arn:aws:iam::${var.AWS_ACCOUNT_ID}:user/${var.username_iam}",
+        "arn:aws:iam::${var.AWS_ACCOUNT_ID}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",
+        "arn:aws:iam::${var.AWS_ACCOUNT_ID}:root"
+      ]},
+      "Action": [
+        "kms:CreateGrant",
+        "kms:ListGrants",
+        "kms:RevokeGrant"
+      ],
+      "Resource": "*",
+      "Condition": {"Bool": {"kms:GrantIsForAWSResource": "true"}}
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_kms_key" "keyForRdsEncryption" {
+  description             = "RDS key for encryption"
+  deletion_window_in_days = 10
+}
+
+data "aws_acm_certificate" "certificateForProd" {
+  domain   = var.domainName
+  statuses = ["ISSUED"]
+}
+
+data "aws_kms_key" "by_id" {
+  key_id = aws_kms_key.keyForEC2Encryption.id
+}
